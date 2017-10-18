@@ -119,7 +119,7 @@ Bucket *new_bucket(char *key) {
 
 
 // adds a file to file list
-File *add_to_filelist(FileList *list, File *file) {
+void add_to_filelist(FileList *list, File *file) {
     if (list->size == list->length) {
         list->size *= 2;
         list->files = realloc(list->files, (size_t) list->size * sizeof(File *));
@@ -131,13 +131,13 @@ File *add_to_filelist(FileList *list, File *file) {
 
 
 // adds a file to bucket
-File *add_to_bucket(Bucket *bucket, File *file) {
+void add_to_bucket(Bucket *bucket, File *file) {
     return add_to_filelist(bucket->value, file);
 }
 
 
 // adds a bucket to hashmap
-Bucket *add_to_hashmap(HashMap *hashmap, Bucket *bucket) {
+void add_to_hashmap(HashMap *hashmap, Bucket *bucket) {
     if (hashmap->size == hashmap->length) {
         hashmap->size *= 2;
         hashmap->buckets = realloc(hashmap->buckets, (size_t) hashmap->size * sizeof(Bucket *));
@@ -241,14 +241,13 @@ Bucket *bucketize(HashMap *hashmap, File *file, int mtime_mode, int md5_mode) {
 
 
 // recursive function for traversing the file tree and looking for duplicate files
-int duplicate_search(char *path, HashMap *filemap, int mtime_mode, int md5_mode) {
+void duplicate_search(char *path, HashMap *filemap, int mtime_mode, int md5_mode) {
     DIR *directory = opendir(path);
     struct dirent *entry;
 
     if (directory == NULL) {
         printf("could not open directory\n");
         perror("opendir");
-        return 1;
     }
 
     while ((entry = readdir(directory)) != NULL) {
