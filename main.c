@@ -7,14 +7,16 @@
 #include <openssl/md5.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <time.h>
 
 typedef struct {
     char *name;
     char *fullpath;
-    unsigned char *md5;
+    char *md5;
     int mtime;
     int size;
 } File;
+
 
 typedef struct {
     File **files;
@@ -22,10 +24,12 @@ typedef struct {
     int length;
 } FileList;
 
+
 typedef struct {
-    unsigned char *key;
+    char *key;
     FileList *value;
 } Bucket;
+
 
 typedef struct {
     Bucket **buckets;
@@ -34,7 +38,19 @@ typedef struct {
 } HashMap;
 
 
-unsigned char* string_to_md5(char* string) {
+char* stringify_md5(unsigned char* md5) {
+    int i;
+    char *string = malloc(MD5_DIGEST_LENGTH + 1);
+    char *string_ptr = string;
+    for (i = 0; i < MD5_DIGEST_LENGTH; i++) {
+        snprintf(string_ptr, 2, "%02X ", md5[i]);
+        string_ptr++;
+    }
+    return string;
+}
+
+
+char* string_to_md5(char* string) {
     MD5_CTX c;
     unsigned char* md5 = malloc(MD5_DIGEST_LENGTH);
 
@@ -42,7 +58,11 @@ unsigned char* string_to_md5(char* string) {
     MD5_Update(&c, string, strlen(string));
     MD5_Final(md5, &c);
 
-    return md5;
+    char* md5_string = stringify_md5(md5);
+
+    free(md5);
+
+    return md5_string;
 }
 
 
@@ -51,9 +71,6 @@ File *new_file(char *name, char *fullpath, int mtime, int size) {
 
     file->name = malloc(strlen(name) + 1);
     strcpy(file->name, name);
-// FIXME
-//    file->fullpath = malloc(strlen(fullpath) + 1 - 2);
-//    strncpy(file->fullpath, fullpath + 2, strlen(fullpath) + 1 - 2);
 
     file->fullpath = malloc(strlen(fullpath) + 1);
     strcpy(file->fullpath, fullpath);
@@ -87,7 +104,7 @@ FileList *new_filelist(int initial_size) {
 
 
 Bucket *new_bucket(char *key) {
-    unsigned char* md5 = string_to_md5(key);
+    char* md5 = string_to_md5(key);
     Bucket *bucket = malloc(sizeof(Bucket));
     bucket->key = md5;
     bucket->value = new_filelist(2);
@@ -123,12 +140,12 @@ Bucket *add_to_hashmap(HashMap *hashmap, Bucket *bucket) {
 
 
 Bucket *get_bucket(HashMap *hashmap, char *key) {
-    unsigned char* md5 = string_to_md5(key);
+    char* md5 = string_to_md5(key);
     int i;
     Bucket *current_bucket;
     for (i = 0; i < hashmap->length; ++i) {
         current_bucket = hashmap->buckets[i];
-        if (strcmp((char*)md5, (char*)current_bucket->key) == 0) {
+        if (strcmp(md5, current_bucket->key) == 0) {
             return current_bucket;
         }
     }
@@ -146,7 +163,7 @@ void calculate_file_md5(File *file) {
     int file_d = open(file->fullpath, O_RDONLY);
     if(file_d < 0) {
         printf("%s\n", file->fullpath);
-        printf("Could not open source file!\n%s\n", strerror(errno));
+        printf("could not open file\n%s\n", strerror(errno));
     }
 
     MD5_Init(&c);
@@ -159,15 +176,11 @@ void calculate_file_md5(File *file) {
 
     MD5_Final(md5, &c);
 
-//    int n;
-//    for (n = 0; n < MD5_DIGEST_LENGTH; n++) {
-//        printf("%02x", md5[n]);
-//    }
-//
-//    printf("\n");
+    char* md5_string = stringify_md5(md5);
 
+    free(md5);
 
-    file->md5 = md5;
+    file->md5 = md5_string;
 }
 
 
@@ -176,23 +189,33 @@ Bucket *bucketize(HashMap *hashmap, File *file, int mtime_mode, int md5_mode) {
     sprintf(size, "%d", file->size);
     int keylen = (int)strlen(file->name) + (int)strlen(size);
     char mtime[12];
-    if (mtime_mode) {
-
+    if (mtime_mode && md5_mode) {
         sprintf(mtime, "%d", file->mtime);
         keylen += (int)strlen(mtime);
-    }
-    if (md5_mode) {
-        keylen += (int)strlen((char*)file->md5);
+        keylen += (int)strlen(file->md5);
+    } else if (mtime_mode) {
+        sprintf(mtime, "%d", file->mtime);
+        keylen += (int)strlen(mtime);
+    } else if (md5_mode) {
+        keylen = (int)strlen(file->md5);
     }
 
     char* key = malloc((size_t)keylen + 1);
-    strcpy(key, file->name);
-    strcat(key, size);
-    if (mtime_mode) {
+
+    if (mtime_mode && md5_mode) {
+        strcpy(key, file->name);
+        strcat(key, size);
         strcat(key, mtime);
-    }
-    if (md5_mode) {
-        strcat(key, (char*)file->md5);
+        strcat(key, file->md5);
+    } else if (mtime_mode) {
+        strcpy(key, file->name);
+        strcat(key, size);
+        strcat(key, mtime);
+    } else if (md5_mode) {
+        strcat(key, file->md5);
+    } else {
+        strcpy(key, file->name);
+        strcat(key, size);
     }
 
     Bucket *bucket = get_bucket(hashmap, key);
@@ -249,20 +272,49 @@ int duplicate_search(char *path, HashMap *filemap, int mtime_mode, int md5_mode)
     closedir(directory);
 }
 
+
+char* format_date(time_t val) {
+    char* time_string = malloc(36);
+    strftime(time_string, 36, "%d-%m-%Y %H:%M", localtime(&val));
+    return time_string;
+}
+
+
 void print(HashMap *hashmap) {
     int i;
+    int j;
     for (i = 0; i < hashmap->length; ++i) {
         Bucket *bucket = hashmap->buckets[i];
         if (bucket->value->length > 1) {
-            printf("%s %d\n", bucket->value->files[0]->name, bucket->value->length);
+            File* original = bucket->value->files[0];
+            char* md5;
+            if (original->md5) {
+                md5 = original->md5;
+            } else {
+                md5 = malloc(1);
+                strcpy(md5, "");
+            }
+            printf("=== %s %d %s %s\n", format_date(original->mtime), original->size, original->name, md5);
+            for (j = 0; j < bucket->value->length; ++j) {
+                printf("%s\n", bucket->value->files[j]->fullpath + 2);
+            }
+            printf("\n");
         }
     }
 }
 
-void help(void) {
-    // TODO
-    printf("%s\n", "help text here");
+
+void help(char* program_name) {
+    printf("Utility for duplicate file lookup in the current working directory.\n");
+    printf("By default looks for duplicate files by name and size.\n");
+    printf("usage: %s [-m] [-d] [-h]\n", program_name);
+    printf("Detailed description of flag usage:\n");
+    printf("    -m    Uses modified time in conjunction with name and size for duplicate comparison.\n");
+    printf("    -d    Uses only MD5 content hash for duplicate comparison.\n");
+    printf("    -d -m   Uses modified time and MD5 content hash in conjunction with name and size for duplicate comparison.\n");
+    printf("    -h    Displays this help text.\n");
 }
+
 
 int main(int argc, char **argv) {
 
@@ -276,7 +328,7 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-m") == 0) {
             md5_mode = 1;
         } else if (strcmp(argv[i], "-h") == 0) {
-            help();
+            help(argv[0]);
             return 0;
         } else {
             printf("%s\n", "invalid argument");
@@ -287,7 +339,6 @@ int main(int argc, char **argv) {
     HashMap *filemap = new_hashmap(10);
 
     duplicate_search(".", filemap, mtime_mode, md5_mode);
-
 
     print(filemap);
 
