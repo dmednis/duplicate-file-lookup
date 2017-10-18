@@ -38,6 +38,7 @@ typedef struct {
 } HashMap;
 
 
+// converts unsigned char* md5 to char* for convenience
 char* stringify_md5(unsigned char* md5) {
     int i;
     char *string = malloc(MD5_DIGEST_LENGTH + 1);
@@ -50,6 +51,7 @@ char* stringify_md5(unsigned char* md5) {
 }
 
 
+// hashes string to md5
 char* string_to_md5(char* string) {
     MD5_CTX c;
     unsigned char* md5 = malloc(MD5_DIGEST_LENGTH);
@@ -66,6 +68,7 @@ char* string_to_md5(char* string) {
 }
 
 
+// creates a new file struct
 File *new_file(char *name, char *fullpath, int mtime, int size) {
     File *file = malloc(sizeof(File));
 
@@ -85,6 +88,7 @@ File *new_file(char *name, char *fullpath, int mtime, int size) {
 }
 
 
+// creates a new hashmap struct
 HashMap *new_hashmap(int initial_size) {
     HashMap *map = malloc(sizeof(HashMap));
     map->buckets = malloc(sizeof(Bucket *) * initial_size);
@@ -94,6 +98,7 @@ HashMap *new_hashmap(int initial_size) {
 }
 
 
+// creates a new file list struct
 FileList *new_filelist(int initial_size) {
     FileList *list = malloc(sizeof(FileList));
     list->files = malloc(sizeof(File *) * initial_size);
@@ -103,6 +108,7 @@ FileList *new_filelist(int initial_size) {
 }
 
 
+// creates a new bucket with key for hashmap
 Bucket *new_bucket(char *key) {
     char* md5 = string_to_md5(key);
     Bucket *bucket = malloc(sizeof(Bucket));
@@ -112,6 +118,7 @@ Bucket *new_bucket(char *key) {
 }
 
 
+// adds a file to file list
 File *add_to_filelist(FileList *list, File *file) {
     if (list->size == list->length) {
         list->size *= 2;
@@ -123,11 +130,13 @@ File *add_to_filelist(FileList *list, File *file) {
 }
 
 
+// adds a file to bucket
 File *add_to_bucket(Bucket *bucket, File *file) {
     return add_to_filelist(bucket->value, file);
 }
 
 
+// adds a bucket to hashmap
 Bucket *add_to_hashmap(HashMap *hashmap, Bucket *bucket) {
     if (hashmap->size == hashmap->length) {
         hashmap->size *= 2;
@@ -139,6 +148,7 @@ Bucket *add_to_hashmap(HashMap *hashmap, Bucket *bucket) {
 }
 
 
+// finds a bucket in a hashmap by key
 Bucket *get_bucket(HashMap *hashmap, char *key) {
     char* md5 = string_to_md5(key);
     int i;
@@ -153,6 +163,7 @@ Bucket *get_bucket(HashMap *hashmap, char *key) {
 }
 
 
+// calculates file content MD5 hash
 void calculate_file_md5(File *file) {
 
     MD5_CTX c;
@@ -184,6 +195,7 @@ void calculate_file_md5(File *file) {
 }
 
 
+// inserts a file in hashmap, creates a key depending on program parameters
 Bucket *bucketize(HashMap *hashmap, File *file, int mtime_mode, int md5_mode) {
     char size[12];
     sprintf(size, "%d", file->size);
@@ -228,6 +240,7 @@ Bucket *bucketize(HashMap *hashmap, File *file, int mtime_mode, int md5_mode) {
 }
 
 
+// recursive function for traversing the file tree and looking for duplicate files
 int duplicate_search(char *path, HashMap *filemap, int mtime_mode, int md5_mode) {
     DIR *directory = opendir(path);
     struct dirent *entry;
@@ -273,6 +286,7 @@ int duplicate_search(char *path, HashMap *filemap, int mtime_mode, int md5_mode)
 }
 
 
+// formats the date
 char* format_date(time_t val) {
     char* time_string = malloc(36);
     strftime(time_string, 36, "%d-%m-%Y %H:%M", localtime(&val));
@@ -280,6 +294,7 @@ char* format_date(time_t val) {
 }
 
 
+// prints duplicate file buckets from hashmap
 void print(HashMap *hashmap) {
     int i;
     int j;
@@ -304,6 +319,7 @@ void print(HashMap *hashmap) {
 }
 
 
+// prints the help text
 void help(char* program_name) {
     printf("Utility for duplicate file lookup in the current working directory.\n");
     printf("By default looks for duplicate files by name and size.\n");
